@@ -1,0 +1,65 @@
+name: YouTube Downloader
+
+on:
+  workflow_dispatch:
+    inputs:
+      youtube_url:
+        description: 'YouTube Video or Playlist URL'
+        required: true
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout repo
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Setup Python
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # Step 3: Install dependencies
+      - name: Install dependencies
+        run: |
+          pip install yt-dlp huggingface_hub
+
+      # Step 4: Download video(s)
+      - name: Download video(s)
+        run: |
+          mkdir -p videos
+          echo "Downloading video(s) from ${{ github.event.inputs.youtube_url }} ..."
+          yt-dlp -f mp4 \
+            --yes-playlist \
+            -o "videos/%(playlist_index)s_%(id)s.%(ext)s" \
+            "${{ github.event.inputs.youtube_url }}"
+
+      # Step 5: Upload to HuggingFace
+      - name: Upload to HuggingFace
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python - <<EOF
+          import os
+          from huggingface_hub import HfApi, login
+
+          # Login
+          login(token=os.environ["HF_TOKEN"])
+          api = HfApi()
+          repo_id = "robiul487/NCAkit"
+
+          # Upload all videos
+          video_dir = "videos"
+          for file_name in sorted(os.listdir(video_dir)):
+              path = os.path.join(video_dir, file_name)
+              api.upload_file(
+                  path_or_fileobj=path,
+                  path_in_repo=f"gameplay_backgrounds/{file_name}",
+                  repo_id=repo_id,
+                  repo_type="dataset"
+              )
+              print("Uploaded:", file_name)
+          EOF
