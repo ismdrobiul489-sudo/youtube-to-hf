@@ -1,1 +1,65 @@
 
+name: YouTube Playlist Downloader
+
+on:
+  push:
+    branches:
+      - main  # main branch এ push করলে auto run হবে
+  workflow_dispatch: {}  # Optional, manual triggerও দিতে পারবে
+
+jobs:
+  download_and_upload:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout repo
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Setup Python
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # Step 3: Install dependencies
+      - name: Install dependencies
+        run: |
+          pip install yt-dlp huggingface_hub
+
+      # Step 4: Download playlist
+      - name: Download playlist
+        run: |
+          mkdir -p videos
+          echo "Downloading playlist..."
+          yt-dlp -f mp4 \
+            --yes-playlist \
+            -o "videos/%(playlist_index)s_%(id)s.%(ext)s" \
+            "https://youtube.com/playlist?list=PLmSs-0cFIbfVako-DmRqVRu_Kqik5vysc&si=2MeDnuCxp6MEm4fg"
+
+      # Step 5: Upload to HuggingFace
+      - name: Upload to HuggingFace
+        run: |
+          python - <<EOF
+          import os
+          from huggingface_hub import HfApi, login
+
+          # Fixed Token & Repo
+          HF_TOKEN = "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"
+          REPO_ID = "robiul487/NCAkit"
+
+          # Login
+          login(token=HF_TOKEN)
+          api = HfApi()
+
+          video_dir = "videos"
+          for file_name in sorted(os.listdir(video_dir)):
+              path = os.path.join(video_dir, file_name)
+              api.upload_file(
+                  path_or_fileobj=path,
+                  path_in_repo=f"gameplay_backgrounds/{file_name}",
+                  repo_id=REPO_ID,
+                  repo_type="dataset"
+              )
+              print("Uploaded:", file_name)
+          EOF
